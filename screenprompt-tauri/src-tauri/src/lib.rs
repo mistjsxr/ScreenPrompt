@@ -7,6 +7,9 @@ mod mouse_hook;
 #[cfg(windows)]
 mod keyboard_hook;
 
+#[cfg(target_os = "macos")]
+mod macos_api;
+
 use tauri::{Manager, WebviewWindow};
 
 #[tauri::command]
@@ -28,15 +31,35 @@ fn show_ethical_notice() -> String {
 }
 
 #[tauri::command]
-#[cfg(windows)]
 fn apply_capture_exclusion(window: WebviewWindow) -> Result<(), String> {
-    windows_api::apply_capture_exclusion(window)
+    #[cfg(windows)]
+    {
+        windows_api::apply_capture_exclusion(window)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos_api::apply_capture_exclusion(window)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        Err("Capture exclusion not supported on this platform".to_string())
+    }
 }
 
 #[tauri::command]
-#[cfg(windows)]
 fn set_click_through(window: WebviewWindow, enabled: bool) -> Result<(), String> {
-    windows_api::set_click_through(window, enabled)
+    #[cfg(windows)]
+    {
+        windows_api::set_click_through(window, enabled)
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos_api::set_click_through(window, enabled)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        Err("Click-through not supported on this platform".to_string())
+    }
 }
 
 #[tauri::command]
@@ -50,27 +73,51 @@ fn get_screen_size(window: WebviewWindow) -> Result<(u32, u32), String> {
 }
 
 #[tauri::command]
-#[cfg(windows)]
-fn install_scroll_hook(window: WebviewWindow) -> Result<(), String> {
-    mouse_hook::install_hook(window)
+fn install_scroll_hook(_window: WebviewWindow) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        mouse_hook::install_hook(_window)
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(())
+    }
 }
 
 #[tauri::command]
-#[cfg(windows)]
 fn uninstall_scroll_hook() -> Result<(), String> {
-    mouse_hook::uninstall_hook()
+    #[cfg(windows)]
+    {
+        mouse_hook::uninstall_hook()
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(())
+    }
 }
 
 #[tauri::command]
-#[cfg(windows)]
-fn install_keyboard_hook(app_handle: tauri::AppHandle) -> Result<(), String> {
-    keyboard_hook::install_hook(app_handle)
+fn install_keyboard_hook(_app_handle: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        keyboard_hook::install_hook(_app_handle)
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(())
+    }
 }
 
 #[tauri::command]
-#[cfg(windows)]
 fn uninstall_keyboard_hook() -> Result<(), String> {
-    keyboard_hook::uninstall_hook()
+    #[cfg(windows)]
+    {
+        keyboard_hook::uninstall_hook()
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(())
+    }
 }
 
 #[tauri::command]
@@ -109,9 +156,13 @@ fn check_windows_version() -> Result<String, String> {
     {
         windows_api::check_windows_version()
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     {
-        Err("ScreenPrompt only supports Windows 10 Build 2004+ or Windows 11".to_string())
+        Ok("macOS (sharingType exclusion supported)".to_string())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        Err("Unsupported operating system".to_string())
     }
 }
 
@@ -139,11 +190,17 @@ pub fn run() {
             // Get the main window
             let window = app.get_webview_window("main").unwrap();
 
-            // Apply Windows-specific settings
+            // Apply platform-specific settings
             #[cfg(windows)]
             {
                 // Apply capture exclusion after window is ready
                 if let Err(e) = windows_api::apply_capture_exclusion(window.clone()) {
+                    log::error!("Failed to apply capture exclusion: {}", e);
+                }
+            }
+            #[cfg(target_os = "macos")]
+            {
+                if let Err(e) = macos_api::apply_capture_exclusion(window.clone()) {
                     log::error!("Failed to apply capture exclusion: {}", e);
                 }
             }
